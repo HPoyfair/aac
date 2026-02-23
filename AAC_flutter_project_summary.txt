@@ -1,0 +1,206 @@
+AAC Flutter App — Project Summary (as of 2026-02-22)
+
+PURPOSE / WHAT THIS PROJECT IS
+- This repository (“AAC”) is being used to build an Augmentative & Alternative Communication (AAC) Flutter application.
+- Core concept: an AAC “Board” (often called a “page”) contains many “Tiles” (buttons). Tapping a Tile performs an action (initially: show a snackbar; later: Text-to-Speech, audio playback, or navigation to another board).
+- The app is being built with clean, scalable structure: UI pages are separated from state/data logic, so the project can grow without turning into a mess.
+
+TECH STACK CHOICES (WHY THESE)
+- Flutter + Material: standard cross-platform UI toolkit for Android/iOS/Web/Desktop.
+- Riverpod (flutter_riverpod): state management.
+  - Why: UI reads state via providers; providers own/manage state and expose methods to change it. This separates “what the user sees” (UI) from “what the app knows/does” (state/logic).
+- go_router: navigation/routing.
+  - Why: provides a clean “map” of app screens with paths like “/” and “/board/:id”. Easier to scale to more screens later (edit tile, settings, import/export).
+
+PROJECT STRUCTURE (CURRENT)
+This structure was created to keep “app wiring” separate from “features” and “shared utilities.”
+
+lib/
+  main.dart
+  app/
+    aac_app.dart
+    router.dart
+  core/
+    (reserved for shared utilities/widgets/constants later)
+  features/
+    boards/
+      domain/
+        board.dart
+        tile.dart
+      presentation/
+        pages/
+          boards_list_page.dart
+          board_page.dart
+        state/
+          boards_provider.dart
+
+IMPORTANT CONCEPTS (CLARITY)
+1) Board (data) vs BoardPage (UI)
+- Board (board.dart) is a plain Dart data object: id, name, tiles, etc.
+- BoardPage (board_page.dart) is the Flutter UI screen that displays a specific board.
+- The “board is a page” idea is correct conceptually, but code separates data (Board) from UI (BoardPage).
+
+2) boardsProvider (state) vs BoardsListPage (UI)
+- boardsProvider (in boards_provider.dart) OWNS the list of boards in memory and provides methods to change it (addBoard, addTile, etc.).
+- BoardsListPage is a screen that DISPLAYS the list and reacts to user input (tap, + button).
+- UI uses ref.watch(...) to rebuild when state changes; UI uses ref.read(...).notifier to call methods that change state.
+
+3) Router and Theme
+- router.dart: defines the app’s routes (paths -> pages). Example: “/” shows board list, “/board/:id” shows a specific board.
+- aac_app.dart: contains MaterialApp.router configuration + theme configuration (global visual styling rules).
+
+WHAT WE HAVE IMPLEMENTED SO FAR
+
+1) Flutter Project Setup
+- Created a Flutter project in the repo.
+- Added dependencies:
+  - go_router
+  - flutter_riverpod
+- Learned a key Flutter rule: run flutter commands from project root (where pubspec.yaml is).
+- Debugged a “missing lib/main.dart” issue that was caused by main.dart being placed in the wrong folder (and also unsaved file changes).
+
+2) App Entry + Wiring
+Files:
+- lib/main.dart
+  - Runs the app and wraps it in ProviderScope so Riverpod works everywhere.
+- lib/app/aac_app.dart
+  - Defines MaterialApp.router
+  - Uses routerConfig = router
+  - Sets basic theme (Material 3, seed color).
+- lib/app/router.dart
+  - Defines routes:
+    - “/” -> BoardsListPage
+    - “/board/:id” -> BoardPage(boardId: id)
+
+3) Boards List Screen (BoardsListPage)
+File:
+- lib/features/boards/presentation/pages/boards_list_page.dart
+What it does:
+- Watches boardsProvider to get the current list of boards.
+- Displays boards in a ListView.
+- FAB (+) calls boardsProvider.notifier.addBoard(...) to create new boards.
+- Tapping a board navigates to /board/<id> using context.go(...) from go_router.
+
+4) Board Data Model (Board)
+File:
+- lib/features/boards/domain/board.dart
+What it represents:
+- The AAC board/page as data.
+- Currently includes:
+  - id
+  - name
+  - tiles (List<Tile>)
+  - copyWith(...) to update a board immutably (important pattern for state updates)
+
+5) Tile Data Model (Tile)
+File:
+- lib/features/boards/domain/tile.dart
+What it represents:
+- One button on a board.
+- Currently includes:
+  - id
+  - label
+  - speakText (optional)
+  - goToBoardId (optional)
+Meaning:
+- If goToBoardId is set -> tile navigates to another board.
+- Otherwise -> tile “speaks” (currently via snackbar; later via TTS).
+
+6) Boards State Management (boardsProvider / BoardsNotifier)
+File:
+- lib/features/boards/presentation/state/boards_provider.dart
+What it does:
+- Holds the source of truth in memory: List<Board>
+- Provides methods:
+  - addBoard(name)
+  - addTile(boardId, label)
+- Default build() returns initial state (example: a “Home” board plus example tiles; can be customized).
+Important pattern used:
+- “Immutable updates”:
+  - state = [...state, newItem] for adding boards
+  - state = [for (...) if (match) updatedBoard else oldBoard] for updating a specific board
+
+7) BoardPage Screen (Grid of Tiles)
+File:
+- lib/features/boards/presentation/pages/board_page.dart
+What it does:
+- Reads boardsProvider, finds the correct Board by boardId.
+- Displays tiles in a GridView (3 columns, spacing).
+- Tile tap behavior:
+  - Navigation tile -> opens another board (if goToBoardId is set)
+  - Speak tile -> shows snackbar with “Speak: …” text
+- FAB (+) shows an AlertDialog with a TextField to prompt for tile label, then calls addTile(boardId, label).
+
+IMPORTANT FIXES/LESSONS LEARNED (SO YOU DON’T GET STUCK AGAIN)
+- Flutter expects lib/main.dart to exist. If it’s in lib/app/main.dart, Flutter won’t run.
+- Running flutter run from a nested folder causes “Target file lib\\main.dart not found” because Flutter looks for lib/main.dart relative to the current directory.
+- VS Code unsaved changes can cause Flutter to compile old code (leading to confusing “symbol not found” errors). Save all files before running.
+- Prefer package imports (package:aac/...) when you start getting lots of ../ paths; they reduce confusion.
+
+WHAT THE APP CAN DO RIGHT NOW
+- Show a list of Boards.
+- Add new Boards via + on the list screen.
+- Tap a Board to open it.
+- Show that Board’s Tiles as a grid.
+- Add new Tiles via a dialog (type label).
+- Tap a Tile:
+  - Navigation tile -> opens another board (if goToBoardId is set)
+  - Speak tile -> shows snackbar with “Speak: …” text
+
+WHAT WE ARE DOING NEXT (RECOMMENDED ROADMAP)
+(1) Make “navigation tiles” real and user-creatable
+- Create a second board (e.g., “Food”) in initial state.
+- Add a tile on Home labeled “Food” with goToBoardId = food_board.
+- Upgrade the “New Tile” dialog to choose tile type:
+  - Speak tile: ask label + optional speakText
+  - Link tile: ask label + target board to open (dropdown list of boards)
+
+(2) Add real speech (Text-to-Speech)
+- Use a TTS plugin (likely flutter_tts).
+- Replace snackbar “Speak:” with actual speech output.
+
+(3) Add edit mode
+- Long press tile -> edit tile label, speakText, action, maybe delete
+- Board settings: rename board, delete board, reorder tiles
+
+(4) Persistence (save data)
+- Currently everything is in-memory: restarting the app loses boards/tiles.
+- Add a data layer (local storage) such as:
+  - JSON stored locally
+  - Hive / Isar / SQLite
+- Add repository + datasource pattern to load on startup and save after edits.
+
+(5) Media and symbols
+- Support tile images:
+  - asset symbols
+  - user-selected images (file picker)
+- Store image paths in Tile model (not UI widgets).
+
+(6) Export / Import
+- Export boards/tiles to a JSON file.
+- Import JSON backups.
+
+(7) Accessibility / AAC UX improvements
+- Adjustable grid size (columns)
+- Large touch targets, consistent color scheme
+- Optional “hold-to-speak”
+- Recents/favorites board, etc.
+
+WHERE TO PICK UP TOMORROW (SUGGESTED STARTING POINT)
+- Reopen this project and review:
+  - boards_provider.dart (how state changes)
+  - boards_list_page.dart (how UI watches provider)
+  - board_page.dart (grid + dialog + tile tap behaviors)
+  - router.dart (routes)
+- Then implement: “tile types” in the add-tile dialog (speak vs link-to-board) + create a real second board to test navigation tiles end-to-end.
+
+NOTES FOR THE NEXT CHAT (IMPORTANT CONTEXT)
+- This project is set up with Riverpod + go_router.
+- The current feature is “Boards,” implemented as:
+  - BoardsListPage (list of boards)
+  - BoardPage (grid of tiles)
+  - BoardsNotifier (state + methods)
+  - Board/Tile models
+- The next goal is to implement richer tile actions and eventually persistence (saving).
+
+End of summary.

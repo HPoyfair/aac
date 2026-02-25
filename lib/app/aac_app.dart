@@ -10,9 +10,10 @@ class AACApp extends StatelessWidget {
       title: 'AAC',
       debugShowCheckedModeBanner: false,
       routerConfig: router,
-      theme: ThemeData(
-        useMaterial3: true,
-        colorSchemeSeed: Colors.blue,
+        theme: ThemeData(
+      useMaterial3: true,
+      colorSchemeSeed: Colors.blue,
+      scaffoldBackgroundColor: const Color(0xFFF6F7FB),
       ),
     );
   }

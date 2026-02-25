@@ -1,6 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../domain/board.dart';
 import '../domain/tile.dart';
+import 'package:flutter/material.dart';
 
 
 /*
@@ -45,13 +46,21 @@ class BoardsNotifier extends Notifier<List<Board>>{
 
 
 
-  void addTile({
+void addTile({
   required String boardId,
   required String label,
+  int? colorValue,
+  IconData? icon,
+  String? speakText,
+  String? goToBoardId,
 }) {
   final newTile = Tile(
     id: DateTime.now().millisecondsSinceEpoch.toString(),
     label: label,
+    colorValue: colorValue ?? 0xFF90CAF9, // default light blue
+    icon: icon,
+    speakText: speakText,
+    goToBoardId: goToBoardId,
   );
 
   state = [

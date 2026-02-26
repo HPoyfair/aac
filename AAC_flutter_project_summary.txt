@@ -1,206 +1,300 @@
-AAC Flutter App — Project Summary (as of 2026-02-22)
+AAC Flutter Project — Current State (Updated)
+=============================================
 
-PURPOSE / WHAT THIS PROJECT IS
-- This repository (“AAC”) is being used to build an Augmentative & Alternative Communication (AAC) Flutter application.
-- Core concept: an AAC “Board” (often called a “page”) contains many “Tiles” (buttons). Tapping a Tile performs an action (initially: show a snackbar; later: Text-to-Speech, audio playback, or navigation to another board).
-- The app is being built with clean, scalable structure: UI pages are separated from state/data logic, so the project can grow without turning into a mess.
+Owner/User: Hayden
+Project: AAC (Augmentative & Alternative Communication) Flutter app
+Repo: https://github.com/HPoyfair/aac
+Platforms: Windows desktop (current), Web available, Android recommended for TTS testing
+State management: Riverpod
+Routing: go_router
 
-TECH STACK CHOICES (WHY THESE)
-- Flutter + Material: standard cross-platform UI toolkit for Android/iOS/Web/Desktop.
-- Riverpod (flutter_riverpod): state management.
-  - Why: UI reads state via providers; providers own/manage state and expose methods to change it. This separates “what the user sees” (UI) from “what the app knows/does” (state/logic).
-- go_router: navigation/routing.
-  - Why: provides a clean “map” of app screens with paths like “/” and “/board/:id”. Easier to scale to more screens later (edit tile, settings, import/export).
+------------------------------------------------------------
+1) What this app does right now
+------------------------------------------------------------
+Startup + navigation
+- App launches into a “Boards list” screen (BoardsListPage).
+- Boards are stored in-memory in a Riverpod Notifier (boardsProvider).
+- Tapping a board navigates to BoardPage via go_router route: /board/:id.
 
-PROJECT STRUCTURE (CURRENT)
-This structure was created to keep “app wiring” separate from “features” and “shared utilities.”
+Boards + layouts
+- Creating a board now opens a dialog:
+  - user enters a board name
+  - user picks a layout preset (3×3, 4×4, 5×5, 3×5, 5×3)
+- Each Board stores its own rows + columns.
+- BoardPage uses the board’s columns to set grid width.
+- BoardPage renders a fixed grid of rows*columns “slots” with no scrolling; empty slots are shown.
 
+Tiles
+- Tiles are now stored as fixed “slots” on the board:
+  - Board.tiles is List<Tile?> with length rows*columns
+  - null means an empty slot
+- Adding a tile (FAB) opens “New Tile” dialog:
+  - label
+  - color palette (int colorValue)
+- addTile() places the new tile into the first available empty slot.
+
+Sentence Bar (AAC-style)
+- BoardPage has a sentence/message bar at the top.
+- In normal mode, tapping a tile:
+  - appends a word to the sentence bar (tile.speakText ?? tile.label)
+  - if tile.goToBoardId is set, it navigates to that board
+- Sentence bar controls:
+  - Backspace (remove last word)
+  - Clear (clear sentence)
+  - Speak (plays full sentence using TTS)
+  - Edit toggle (enter/exit edit mode)
+
+Edit mode (rearrange + edit)
+- Edit mode is toggled from the sentence bar (pencil/check icon).
+- While in edit mode:
+  - Tiles can be dragged and dropped onto other slots to swap positions.
+  - Empty slots highlight as drop targets.
+  - Clicking a tile opens an “Edit Tile” dialog (currently: label + color).
+  - FAB is hidden while in edit mode.
+
+------------------------------------------------------------
+2) Folder structure (current)
+------------------------------------------------------------
 lib/
   main.dart
   app/
     aac_app.dart
     router.dart
   core/
-    (reserved for shared utilities/widgets/constants later)
+    providers/
+      edit_mode_provider.dart
+      sentence_provider.dart
+      tts_provider.dart
+    services/
+      tts_service.dart
   features/
     boards/
-      domain/
-        board.dart
-        tile.dart
       presentation/
+        domain/
+          board.dart
+          tile.dart
         pages/
           boards_list_page.dart
           board_page.dart
         state/
           boards_provider.dart
+        widgets/
+          sentence_bar.dart
+          tile_card.dart
 
-IMPORTANT CONCEPTS (CLARITY)
-1) Board (data) vs BoardPage (UI)
-- Board (board.dart) is a plain Dart data object: id, name, tiles, etc.
-- BoardPage (board_page.dart) is the Flutter UI screen that displays a specific board.
-- The “board is a page” idea is correct conceptually, but code separates data (Board) from UI (BoardPage).
+Notes / conventions:
+- “domain” here currently lives under features/boards/presentation/domain.
+- Board/Tiles are “mostly plain data”, but Tile currently imports Flutter because it stores IconData.
+- core/ is used for shared services/providers (TTS, sentence state, edit-mode state).
+- features/boards/presentation holds UI pages + widgets + board state provider.
 
-2) boardsProvider (state) vs BoardsListPage (UI)
-- boardsProvider (in boards_provider.dart) OWNS the list of boards in memory and provides methods to change it (addBoard, addTile, etc.).
-- BoardsListPage is a screen that DISPLAYS the list and reacts to user input (tap, + button).
-- UI uses ref.watch(...) to rebuild when state changes; UI uses ref.read(...).notifier to call methods that change state.
+------------------------------------------------------------
+3) Dependencies (pubspec.yaml)
+------------------------------------------------------------
+Core:
+- flutter
+- flutter_riverpod
+- go_router
+- cupertino_icons
 
-3) Router and Theme
-- router.dart: defines the app’s routes (paths -> pages). Example: “/” shows board list, “/board/:id” shows a specific board.
-- aac_app.dart: contains MaterialApp.router configuration + theme configuration (global visual styling rules).
+TTS:
+- flutter_tts (integrated)
 
-WHAT WE HAVE IMPLEMENTED SO FAR
+------------------------------------------------------------
+4) Architecture explanation (simple)
+------------------------------------------------------------
+Models
+- Board: id, name, rows, columns, tiles (List<Tile?> slots), copyWith()
+- Tile: id, label, optional speakText, optional goToBoardId, optional colorValue int, optional icon (IconData), copyWith()
 
-1) Flutter Project Setup
-- Created a Flutter project in the repo.
-- Added dependencies:
-  - go_router
-  - flutter_riverpod
-- Learned a key Flutter rule: run flutter commands from project root (where pubspec.yaml is).
-- Debugged a “missing lib/main.dart” issue that was caused by main.dart being placed in the wrong folder (and also unsaved file changes).
+State (“shared boxes”)
+- boardsProvider (BoardsNotifier): holds List<Board> in memory and provides methods:
+  - addBoard(name, rows, columns)
+  - addTile(boardId, label, colorValue?) -> fills first empty slot
+  - swapTiles(boardId, fromIndex, toIndex)
+  - updateTileAt(boardId, index, updatedTile)
+  - clearTileAt(boardId, index) (optional helper)
 
-2) App Entry + Wiring
-Files:
-- lib/main.dart
-  - Runs the app and wraps it in ProviderScope so Riverpod works everywhere.
-- lib/app/aac_app.dart
-  - Defines MaterialApp.router
-  - Uses routerConfig = router
-  - Sets basic theme (Material 3, seed color).
-- lib/app/router.dart
-  - Defines routes:
-    - “/” -> BoardsListPage
-    - “/board/:id” -> BoardPage(boardId: id)
+- sentenceProvider: holds List<String> words
+  - addWord, backspace, clear, asText()
 
-3) Boards List Screen (BoardsListPage)
-File:
-- lib/features/boards/presentation/pages/boards_list_page.dart
-What it does:
-- Watches boardsProvider to get the current list of boards.
-- Displays boards in a ListView.
-- FAB (+) calls boardsProvider.notifier.addBoard(...) to create new boards.
-- Tapping a board navigates to /board/<id> using context.go(...) from go_router.
+- editModeProvider: holds bool (edit mode on/off)
+  - toggle, set(value)
 
-4) Board Data Model (Board)
-File:
-- lib/features/boards/domain/board.dart
-What it represents:
-- The AAC board/page as data.
-- Currently includes:
-  - id
-  - name
-  - tiles (List<Tile>)
-  - copyWith(...) to update a board immutably (important pattern for state updates)
+- ttsProvider + TtsService:
+  - TtsService wraps flutter_tts with init defaults and speak/stop
+  - provider stops TTS on dispose
 
-5) Tile Data Model (Tile)
-File:
-- lib/features/boards/domain/tile.dart
-What it represents:
-- One button on a board.
-- Currently includes:
-  - id
-  - label
-  - speakText (optional)
-  - goToBoardId (optional)
-Meaning:
-- If goToBoardId is set -> tile navigates to another board.
-- Otherwise -> tile “speaks” (currently via snackbar; later via TTS).
+UI
+- UI reads state with ref.watch(...)
+- UI changes state with ref.read(provider.notifier).method(...)
+- When provider state changes, widgets watching it rebuild.
 
-6) Boards State Management (boardsProvider / BoardsNotifier)
-File:
-- lib/features/boards/presentation/state/boards_provider.dart
-What it does:
-- Holds the source of truth in memory: List<Board>
-- Provides methods:
-  - addBoard(name)
-  - addTile(boardId, label)
-- Default build() returns initial state (example: a “Home” board plus example tiles; can be customized).
-Important pattern used:
-- “Immutable updates”:
-  - state = [...state, newItem] for adding boards
-  - state = [for (...) if (match) updatedBoard else oldBoard] for updating a specific board
+------------------------------------------------------------
+5) Routing
+------------------------------------------------------------
+go_router routes:
+- "/" -> BoardsListPage
+- "/board/:id" -> BoardPage(boardId: id)
 
-7) BoardPage Screen (Grid of Tiles)
-File:
-- lib/features/boards/presentation/pages/board_page.dart
-What it does:
-- Reads boardsProvider, finds the correct Board by boardId.
-- Displays tiles in a GridView (3 columns, spacing).
-- Tile tap behavior:
-  - Navigation tile -> opens another board (if goToBoardId is set)
-  - Speak tile -> shows snackbar with “Speak: …” text
-- FAB (+) shows an AlertDialog with a TextField to prompt for tile label, then calls addTile(boardId, label).
+BoardsListPage:
+- context.go('/board/${board.id}')
 
-IMPORTANT FIXES/LESSONS LEARNED (SO YOU DON’T GET STUCK AGAIN)
-- Flutter expects lib/main.dart to exist. If it’s in lib/app/main.dart, Flutter won’t run.
-- Running flutter run from a nested folder causes “Target file lib\\main.dart not found” because Flutter looks for lib/main.dart relative to the current directory.
-- VS Code unsaved changes can cause Flutter to compile old code (leading to confusing “symbol not found” errors). Save all files before running.
-- Prefer package imports (package:aac/...) when you start getting lots of ../ paths; they reduce confusion.
+BoardPage tile tap (normal mode):
+- adds word to sentence bar
+- optionally navigates if goToBoardId is set
 
-WHAT THE APP CAN DO RIGHT NOW
-- Show a list of Boards.
-- Add new Boards via + on the list screen.
-- Tap a Board to open it.
-- Show that Board’s Tiles as a grid.
-- Add new Tiles via a dialog (type label).
-- Tap a Tile:
-  - Navigation tile -> opens another board (if goToBoardId is set)
-  - Speak tile -> shows snackbar with “Speak: …” text
+SentenceBar:
+- Speak button uses ttsProvider to speak the sentence string.
 
-WHAT WE ARE DOING NEXT (RECOMMENDED ROADMAP)
-(1) Make “navigation tiles” real and user-creatable
-- Create a second board (e.g., “Food”) in initial state.
-- Add a tile on Home labeled “Food” with goToBoardId = food_board.
-- Upgrade the “New Tile” dialog to choose tile type:
-  - Speak tile: ask label + optional speakText
-  - Link tile: ask label + target board to open (dropdown list of boards)
+------------------------------------------------------------
+6) Key files and what they contain
+------------------------------------------------------------
 
-(2) Add real speech (Text-to-Speech)
-- Use a TTS plugin (likely flutter_tts).
-- Replace snackbar “Speak:” with actual speech output.
+A) lib/main.dart
+- Entry point.
+- Wraps AACApp in ProviderScope (enables Riverpod providers).
 
-(3) Add edit mode
-- Long press tile -> edit tile label, speakText, action, maybe delete
-- Board settings: rename board, delete board, reorder tiles
+B) lib/app/aac_app.dart
+- MaterialApp.router(...)
+- routerConfig: router
+- Material 3 theme (seed color)
 
-(4) Persistence (save data)
-- Currently everything is in-memory: restarting the app loses boards/tiles.
-- Add a data layer (local storage) such as:
-  - JSON stored locally
-  - Hive / Isar / SQLite
-- Add repository + datasource pattern to load on startup and save after edits.
+C) lib/app/router.dart
+- Defines GoRouter routes for BoardsListPage and BoardPage.
 
-(5) Media and symbols
-- Support tile images:
-  - asset symbols
-  - user-selected images (file picker)
-- Store image paths in Tile model (not UI widgets).
+D) lib/core/services/tts_service.dart
+- Wraps FlutterTts
+- _init() sets rate/pitch/volume
+- speak(text): init, stop previous speech, speak trimmed text
+- stop(): stop
 
-(6) Export / Import
-- Export boards/tiles to a JSON file.
-- Import JSON backups.
+E) lib/core/providers/tts_provider.dart
+- Provides a single TtsService instance
+- onDispose calls stop()
 
-(7) Accessibility / AAC UX improvements
-- Adjustable grid size (columns)
-- Large touch targets, consistent color scheme
-- Optional “hold-to-speak”
-- Recents/favorites board, etc.
+F) lib/core/providers/sentence_provider.dart
+- Stores sentence words as List<String>
+- addWord/backspace/clear/asText
 
-WHERE TO PICK UP TOMORROW (SUGGESTED STARTING POINT)
-- Reopen this project and review:
-  - boards_provider.dart (how state changes)
-  - boards_list_page.dart (how UI watches provider)
-  - board_page.dart (grid + dialog + tile tap behaviors)
-  - router.dart (routes)
-- Then implement: “tile types” in the add-tile dialog (speak vs link-to-board) + create a real second board to test navigation tiles end-to-end.
+G) lib/core/providers/edit_mode_provider.dart
+- Stores edit-mode boolean and toggles it.
 
-NOTES FOR THE NEXT CHAT (IMPORTANT CONTEXT)
-- This project is set up with Riverpod + go_router.
-- The current feature is “Boards,” implemented as:
-  - BoardsListPage (list of boards)
-  - BoardPage (grid of tiles)
-  - BoardsNotifier (state + methods)
-  - Board/Tile models
-- The next goal is to implement richer tile actions and eventually persistence (saving).
+H) lib/features/boards/presentation/domain/board.dart
+- Board model with rows/columns and slot-based tiles: List<Tile?>
+- totalSlots getter
+- copyWith
 
-End of summary.
+I) lib/features/boards/presentation/domain/tile.dart
+- Tile model with label + optional speakText/goToBoardId/colorValue/icon
+- copyWith
+
+J) lib/features/boards/presentation/state/boards_provider.dart
+- In-memory boards list + mutations:
+  - build(): creates default Home board (3×3) and places 4 starter tiles in first slots
+  - addBoard(name, rows, columns): creates board with List<Tile?>.filled(rows*columns, null)
+  - addTile(): finds first null slot, inserts new Tile
+  - swapTiles(): swaps slots by indices
+  - updateTileAt(): replaces tile at a slot index
+  - clearTileAt(): sets slot to null
+
+K) lib/features/boards/presentation/pages/boards_list_page.dart
+- Displays ListView of boards
+- FAB opens “New Board” dialog (name + layout dropdown)
+- Calls addBoard(...)
+
+L) lib/features/boards/presentation/pages/board_page.dart
+- Shows sentence bar on top
+- Shows fixed-size grid that fits the window (no scrolling):
+  - LayoutBuilder computes cell width/height
+  - childAspectRatio = cellW / cellH to prevent clipping
+- Each slot is a DragTarget:
+  - edit mode on: accepts drops to swapTiles()
+- Each tile (non-null slot):
+  - normal mode: append word; optionally navigate
+  - edit mode: tap opens edit dialog (label + color) and updateTileAt()
+  - edit mode: tile is draggable (Draggable<int>) and uses grid cell size for feedback
+- Empty slots:
+  - show plus in normal mode (visual)
+  - highlight in edit mode when being hovered as a drop target
+- FAB:
+  - hidden in edit mode
+  - normal mode: opens “New Tile” dialog (label + color palette), calls addTile()
+
+M) lib/features/boards/presentation/widgets/tile_card.dart
+- UI widget that renders a tile.
+- Takes the full Tile object: TileCard(tile: tile, onTap: ...)
+- Uses tile.colorValue for background color, and tile.icon if present.
+
+N) lib/features/boards/presentation/widgets/sentence_bar.dart
+- Displays current sentence string and controls:
+  - backspace, clear, edit toggle, speak (ttsProvider)
+
+------------------------------------------------------------
+7) Running the app
+------------------------------------------------------------
+Run from the project root (folder containing pubspec.yaml).
+
+Commands:
+- flutter pub get
+- flutter run
+- flutter run -d windows
+- flutter run -d chrome
+- flutter clean
+
+Common gotcha:
+- Running flutter from inside lib/ or lib/app causes “lib/main.dart not found”.
+
+------------------------------------------------------------
+8) TTS status + Windows NuGet note
+------------------------------------------------------------
+TTS is integrated in code (flutter_tts + TtsService + provider).
+If Windows desktop build fails with:
+- “nuget.exe not found. Please install it.”
+Then NuGet must be installed and on PATH.
+
+Suggested checks:
+- where nuget
+- nuget
+
+Suggested fix pattern:
+1) Confirm file location:
+   Test-Path C:\tools\nuget.exe
+   Test-Path C:\tools\nuget\nuget.exe
+2) Ensure PATH contains:
+   C:\tools\nuget
+3) Restart terminal, then:
+   where nuget
+
+Alternative:
+- Run on Android for easier TTS verification.
+
+------------------------------------------------------------
+9) Known limitations / design notes
+------------------------------------------------------------
+- Tile.icon uses IconData (Flutter type). If you want JSON persistence later, switch to a persistable iconKey/iconId instead.
+- Current “recommended icons while typing” feature is not implemented; future plan likely needs an icon catalog + searchable index (eventually FTS if scaling to 20k icons + bilingual).
+- Tile taps in normal mode currently build the sentence (does not speak each word immediately).
+  - If desired, add a setting/toggle for “speak on tap”.
+
+------------------------------------------------------------
+10) Next recommended steps
+------------------------------------------------------------
+Edit mode improvements
+- Allow tapping an empty slot in edit mode to create a tile in that exact slot.
+- Add delete tile button in edit dialog (uses clearTileAt()).
+- Add edit fields: speakText separate from label; goToBoardId picker; icon picker.
+
+Persistence
+- Decide storage backend (Hive/Isar/SQLite) for saving boards/tiles.
+- Keep JSON export/import for sharing and backup.
+
+Icons
+- Replace IconData in Tile with iconId/iconKey for persistence.
+- Build small icon catalog + keyword search (English/Spanish), then scale up later.
+
+UX polish
+- Resize text/icon/padding in TileCard based on grid cell size (for 5×5 and larger layouts).
+- Add “home/back” navigation conventions for boards.
+
+END OF FILE
